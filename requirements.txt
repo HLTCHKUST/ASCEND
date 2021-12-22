@@ -6,3 +6,6 @@ librosa
 datasets
 transformers
 jiwer
+jieba
+editdistance
+tensorboard
