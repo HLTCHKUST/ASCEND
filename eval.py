@@ -51,81 +51,92 @@ logger = logging.getLogger(__name__)
 #####
 def run(model_args, data_args, training_args):
     ###
-    # Prepare Dataset
-    ###
-    raw_datasets = DatasetDict()
-    print('Loading train dataset...')
-    raw_datasets["train"] = load_dataset(data_args.train_manifest_path, data_args.num_workers, 
-                                    data_args.audio_column_name, data_args.text_column_name)
-    print('Loading validation dataset...')
-    raw_datasets["valid"] = load_dataset(data_args.valid_manifest_path, data_args.num_workers, 
-                                    data_args.audio_column_name, data_args.text_column_name)
-    print('Loading test dataset...')
-    raw_datasets["test"] = load_dataset(data_args.test_manifest_path, data_args.num_workers, 
-                                    data_args.audio_column_name, data_args.text_column_name)
-
-    ###
     # Prepare Processor & Model    
     ###
     print('Load Wav2Vec2 model and processor...')
+    config = Wav2Vec2Config.from_pretrained(model_args.model_name_or_path)
+    config.update({
+        "mask_time_prob": 0,
+        "mask_time_length": 0,
+        "mask_feature_prob": 0,
+        "mask_feature_length": 0,
+        "gradient_checkpointing": True,
+    })
     processor = Wav2Vec2Processor.from_pretrained(model_args.model_name_or_path)
-    model = Wav2Vec2ForCTC.from_pretrained(model_args.model_name_or_path)
-    model.cuda()
+    model = Wav2Vec2ForCTC.from_pretrained(model_args.model_name_or_path, config=config)
+    model.cuda()    
     
-    ###
-    # Preprocessing datasets
-    ###
-    print('Preprocess dataset...')
-    
-    # Remove ignorable characters
-    print('Removing ignorable characters')
-    chars_to_ignore_re = f"[{re.escape(''.join(CHARS_TO_IGNORE))}]"
-    def remove_special_characters(batch):
-        if chars_to_ignore_re is not None:
-            batch[data_args.text_column_name] = re.sub(chars_to_ignore_re, "", batch[data_args.text_column_name]).lower() + " "
-        else:
-            batch[data_args.text_column_name] = batch[data_args.text_column_name].lower() + " "
-        return batch
+    if not os.path.exists('./cache/preprocess_data.arrow'):
+        ###
+        # Prepare Dataset
+        ###
+        raw_datasets = DatasetDict()
+        print('Loading train dataset...')
+        raw_datasets["train"] = load_dataset(data_args.train_manifest_path, data_args.num_workers, 
+                                        data_args.audio_column_name, data_args.text_column_name)
+        print('Loading validation dataset...')
+        raw_datasets["valid"] = load_dataset(data_args.valid_manifest_path, data_args.num_workers, 
+                                        data_args.audio_column_name, data_args.text_column_name)
+        print('Loading test dataset...')
+        raw_datasets["test"] = load_dataset(data_args.test_manifest_path, data_args.num_workers, 
+                                        data_args.audio_column_name, data_args.text_column_name)
 
-    with training_args.main_process_first(desc="dataset map special characters removal"):
-        raw_datasets = raw_datasets.map(
-            remove_special_characters,
-            num_proc=data_args.preprocessing_num_workers,
-            desc="remove special characters from datasets",
-            load_from_cache_file=True,
-            cache_file_names={
-                "train": "./cache/train/clean",
-                "valid": "./cache/valid/clean",
-                "test": "./cache/test/clean"
-            }
-        )
+        print('Preprocess dataset...')
+
+        # Remove ignorable characters
+        print('Removing ignorable characters')
+        chars_to_ignore_re = f"[{re.escape(''.join(CHARS_TO_IGNORE))}]"
+        def remove_special_characters(batch):
+            if chars_to_ignore_re is not None:
+                batch[data_args.text_column_name] = re.sub(chars_to_ignore_re, "", batch[data_args.text_column_name]).lower() + " "
+            else:
+                batch[data_args.text_column_name] = batch[data_args.text_column_name].lower() + " "
+            return batch
+
+        with training_args.main_process_first(desc="dataset map special characters removal"):
+            raw_datasets = raw_datasets.map(
+                remove_special_characters,
+                num_proc=data_args.preprocessing_num_workers,
+                desc="remove special characters from datasets",
+                load_from_cache_file=True,
+                cache_file_names={
+                    "train": "cache/train_clean.arrow",
+                    "valid": "cache/valid_clean.arrow",
+                    "test": "cache/test_clean.arrow"
+                }
+            )
+
+        # Preprocess audio sample and label text
+        print('Vectorize dataset...')
+
+        def prepare_dataset(batch):
+            # Preprocess audio
+            batch["input_values"] = processor(batch["speech_sample"]).input_values[0]
+
+            # Preprocess text
+            with processor.as_target_processor():
+                batch["labels"] = processor(batch[data_args.text_column_name]).input_ids
+
+            return batch
+
+        with training_args.main_process_first(desc="dataset map preprocessing"):
+            vectorized_datasets = raw_datasets.map(
+                prepare_dataset,
+                remove_columns=raw_datasets["train"].column_names,
+                num_proc=data_args.preprocessing_num_workers,
+                desc="preprocess datasets",
+                load_from_cache_file=False,
+                cache_file_names={
+                    "train": "cache/train_vec.arrow",
+                    "valid": "cache/valid_vec.arrow",
+                    "test": "cache/test_vec.arrow"
+                }
+            )
         
-    # Preprocess audio sample and label text
-    print('Vectorize dataset...')
-    
-    def prepare_dataset(batch):
-        # Preprocess audio
-        batch["input_values"] = processor(batch["speech_sample"]).input_values[0]
-
-        # Preprocess text
-        with processor.as_target_processor():
-            batch["labels"] = processor(batch[data_args.text_column_name]).input_ids
-            
-        return batch
-
-    with training_args.main_process_first(desc="dataset map preprocessing"):
-        vectorized_datasets = raw_datasets.map(
-            prepare_dataset,
-            remove_columns=raw_datasets["train"].column_names,
-            num_proc=data_args.preprocessing_num_workers,
-            desc="preprocess datasets",
-            load_from_cache_file=True,
-            cache_file_names={
-                "train": "./cache/train/vec",
-                "valid": "./cache/valid/vec",
-                "test": "./cache/test/vec"
-            }
-        )
+        vectorized_datasets.save_to_disk('./cache/preprocess_data.arrow')
+    else:
+        print('Loading cached dataset...')
+        vectorized_datasets = datasets.load_from_disk('./cache/preprocess_data.arrow')
 
     if data_args.preprocessing_only:
         logger.info(f"Data preprocessing finished. Files cached at {vectorized_datasets.cache_files}")
