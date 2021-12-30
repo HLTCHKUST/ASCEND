@@ -10,6 +10,29 @@ class ModelArguments:
     model_name_or_path: Optional[str] = field(
         default="ydshieh/wav2vec2-large-xlsr-53-chinese-zh-cn-gpt", metadata={"help": "The path of the HuggingFace model."}
     )
+    mask_time_prob: float = field(
+        default=0.065,
+        metadata={
+            "help": "Probability of each feature vector along the time axis to be chosen as the start of the vector"
+            "span to be masked. Approximately ``mask_time_prob * sequence_length // mask_time_length`` feature"
+            "vectors will be masked along the time axis."
+        },
+    )
+    mask_time_length: int = field(
+        default=0,
+        metadata={"help": "Length of vector span to mask along the time axis."},
+    )
+    mask_feature_prob: float = field(
+        default=0.004,
+        metadata={
+            "help": "Probability of each feature vector along the feature axis to be chosen as the start of the vector"
+            "span to be masked. Approximately ``mask_feature_prob * sequence_length // mask_feature_length`` feature bins will be masked along the time axis."
+        },
+    )
+    mask_feature_length: int = field(
+        default=0,
+        metadata={"help": "Length of vector span to mask along the feature axis."},
+    )
 
 @dataclass
 class DataArguments:
@@ -20,7 +43,7 @@ class DataArguments:
         default="dataset/train_metadata.csv", metadata={"help": "The path of the training dataset to use."}
     )
     valid_manifest_path: Optional[str] = field(
-        default="dataset/val_metadata.csv", metadata={"help": "The path of the validation dataset to use."}
+        default="dataset/validation_metadata.csv", metadata={"help": "The path of the validation dataset to use."}
     )
     test_manifest_path: Optional[str] = field(
         default="dataset/test_metadata.csv", metadata={"help": "The path of the testing dataset to use."}
