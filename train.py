@@ -55,18 +55,19 @@ def run(model_args, data_args, training_args):
     ###
     # Prepare Processor & Model    
     ###
+    training_args.gradient_checkpointing = True
     print('Load Wav2Vec2 model and processor...')
     config = Wav2Vec2Config.from_pretrained(model_args.model_name_or_path)
     config.update({
-        "mask_time_prob": 0,
-        "mask_time_length": 0.05,
-        "mask_feature_prob": 0,
-        "mask_feature_length": 0,
-        "gradient_checkpointing": True,
+        "mask_time_prob": model_args.mask_time_prob,
+        "mask_time_length": model_args.mask_time_length,
+        "mask_feature_prob": model_args.mask_feature_prob,
+        "mask_feature_length": model_args.mask_feature_length,
+        "gradient_checkpointing": training_args.gradient_checkpointing,
     })
     processor = Wav2Vec2Processor.from_pretrained(model_args.model_name_or_path)
     model = Wav2Vec2ForCTC.from_pretrained(model_args.model_name_or_path, config=config)
-    model.cuda()    
+    model.cuda()
     
     if not os.path.exists('./cache/preprocess_data.arrow'):
         ###
