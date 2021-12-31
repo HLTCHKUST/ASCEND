@@ -73,7 +73,7 @@ def run(model_args, data_args, training_args):
     cache_dir_path = "./{}/{}".format(data_args.cache_dir_name, model_args.model_name_or_path)
     os.makedirs(cache_dir_path, exist_ok=True)
 
-    
+    print('cache_dir_path', cache_dir_path)
     if not os.path.exists("{}/preprocess_data.arrow".format(cache_dir_path)):
         ###
         # Prepare Dataset
@@ -91,28 +91,28 @@ def run(model_args, data_args, training_args):
 
         print('Preprocess dataset...')
 
-        # # Remove ignorable characters
-        # print('Removing ignorable characters')
-        # chars_to_ignore_re = f"[{re.escape(''.join(CHARS_TO_IGNORE))}]"
-        # def remove_special_characters(batch):
-        #     if chars_to_ignore_re is not None:
-        #         batch[data_args.text_column_name] = re.sub(chars_to_ignore_re, "", batch[data_args.text_column_name]).lower() + " "
-        #     else:
-        #         batch[data_args.text_column_name] = batch[data_args.text_column_name].lower() + " "
-        #     return batch
+        # Remove ignorable characters
+        print('Removing ignorable characters')
+        chars_to_ignore_re = f"[{re.escape(''.join(CHARS_TO_IGNORE))}]"
+        def remove_special_characters(batch):
+            if chars_to_ignore_re is not None:
+                batch[data_args.text_column_name] = re.sub(chars_to_ignore_re, "", batch[data_args.text_column_name]).lower() + " "
+            else:
+                batch[data_args.text_column_name] = batch[data_args.text_column_name].lower() + " "
+            return batch
 
-        # with training_args.main_process_first(desc="dataset map special characters removal"):
-        #     raw_datasets = raw_datasets.map(
-        #         remove_special_characters,
-        #         num_proc=data_args.preprocessing_num_workers,
-        #         desc="remove special characters from datasets",
-        #         load_from_cache_file=True,
-        #         cache_file_names={
-        #             "train": "{}/train_clean.arrow".format(cache_dir_path),
-        #             "valid": "{}/valid_clean.arrow".format(cache_dir_path),
-        #             "test": "{}/test_clean.arrow".format(cache_dir_path),
-        #         }
-        #     )
+        with training_args.main_process_first(desc="dataset map special characters removal"):
+            raw_datasets = raw_datasets.map(
+                remove_special_characters,
+                num_proc=data_args.preprocessing_num_workers,
+                desc="remove special characters from datasets",
+                load_from_cache_file=True,
+                cache_file_names={
+                    "train": "{}/train_clean.arrow".format(cache_dir_path),
+                    "valid": "{}/valid_clean.arrow".format(cache_dir_path),
+                    "test": "{}/test_clean.arrow".format(cache_dir_path),
+                }
+            )
 
         # Build vocabulary
         print('Build vocabulary...')
@@ -133,7 +133,7 @@ def run(model_args, data_args, training_args):
                     "test": "{}/test_vocab.arrow".format(cache_dir_path),
                 }
             )
-            vocab_list = list(set(list(chain.from_iterable(_vocab["train"]["vocab"])) | list(chain.from_iterable(_vocab["valid"]["vocab"])) | list(chain.from_iterable(_vocab["test"]["vocab"]))))
+            vocab_list = list(set(list(chain.from_iterable(_vocab["train"]["vocab"])) + list(chain.from_iterable(_vocab["valid"]["vocab"])) + list(chain.from_iterable(_vocab["test"]["vocab"]))))
             vocab_dict = {v: k for k, v in enumerate(vocab_list)}
             vocab_dict["|"] = vocab_dict[" "]
             vocab_dict["[UNK]"] = len(vocab_dict)
@@ -142,12 +142,6 @@ def run(model_args, data_args, training_args):
             # Dump vocabulary
             with open("{}/vocab.json".format(training_args.output_dir), "w") as vocab_file:
                 json.dump(vocab_dict, vocab_file)
-
-        # Load processor
-        print('Load Wav2Vec2 processor...')
-        tokenizer = Wav2Vec2CTCTokenizer("{}/vocab.json".format(training_args.output_dir), unk_token="[UNK]", pad_token="[PAD]", word_delimiter_token="|")
-        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(model_args.model_name_or_path)
-        processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
         # Preprocess audio sample and label text
         print('Vectorize dataset...')
@@ -189,6 +183,12 @@ def run(model_args, data_args, training_args):
     # Prepare Data Collator and Trainer
     ###
     print('Preparing Trainer...')
+
+    # Load processor
+    print('Load Wav2Vec2 processor...')
+    tokenizer = Wav2Vec2CTCTokenizer("{}/vocab.json".format(training_args.output_dir), unk_token="[UNK]", pad_token="[PAD]", word_delimiter_token="|")
+    feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(model_args.model_name_or_path)
+    processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
     # Instantiate custom data collator
     data_collator = DataCollatorCTCWithPadding(processor=processor)

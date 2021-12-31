@@ -12,7 +12,7 @@ CUDA_VISIBLE_DEVICES=3 python train.py --model_name_or_path=ydshieh/wav2vec2-lar
     --evaluation_strategy=epoch --eval_steps=1 --eval_accumulation_steps=100 \
     --save_steps=1 --save_strategy=epoch --save_total_limit=3 \
     --metric_for_best_model=mer --greater_is_better=False --load_best_model_at_end=True \
-    --gradient_checkpointing=True \
+    --gradient_checkpointing=True
 
 # CUDA_VISIBLE_DEVICES=2 python train.py --model_name_or_path=jonatasgrosman/wav2vec2-large-xlsr-53-english \
 #     --train_manifest_path=dataset/train_metadata.csv \
