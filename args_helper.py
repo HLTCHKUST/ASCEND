@@ -19,7 +19,7 @@ class ModelArguments:
         },
     )
     mask_time_length: int = field(
-        default=0,
+        default=2,
         metadata={"help": "Length of vector span to mask along the time axis."},
     )
     mask_feature_prob: float = field(
@@ -30,7 +30,7 @@ class ModelArguments:
         },
     )
     mask_feature_length: int = field(
-        default=0,
+        default=2,
         metadata={"help": "Length of vector span to mask along the feature axis."},
     )
 
@@ -67,4 +67,18 @@ class DataArguments:
     text_column_name: Optional[str] = field(
         default="text",
         metadata={"help": "The name of the dataset column containing the text data. Defaults to 'text'"},
+    )
+    cache_dir_name: Optional[str] = field(
+        default="cache",
+        metadata={"help": "Name of cache directory"},
+    )
+
+@dataclass
+class TrainingArguments(TrainingArguments):
+    """
+    Arguments pertraining to the training pipeline.
+    """
+    output_dir: Optional[str] = field(
+        default="./save",
+        metadata={"help": "Output directory"},
     )
