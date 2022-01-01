@@ -58,34 +58,27 @@ def run(model_args, data_args, training_args):
 
     os.makedirs(training_args.output_dir, exist_ok=True)
 
-    print('Load Wav2Vec2 model...')
-    config = Wav2Vec2Config.from_pretrained(model_args.model_name_or_path)
-    config.update({
-        "mask_time_prob": model_args.mask_time_prob,
-        "mask_time_length": model_args.mask_time_length,
-        "mask_feature_prob": model_args.mask_feature_prob,
-        "mask_feature_length": model_args.mask_feature_length,
-        "gradient_checkpointing": training_args.gradient_checkpointing,
-    })
-    model = Wav2Vec2ForCTC.from_pretrained(model_args.model_name_or_path, config=config)
-    model.cuda()
-
     def load_processor(model_args, training_args):
         # Load processor
         print('Load Wav2Vec2 processor...')
 
         tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(model_args.model_name_or_path)
-        logger.info("Vocab length (initial)", len(tokenizer))
-        print("Vocab length (initial)", len(tokenizer))
+        logger.info("Vocab length (initial): {}".format(len(tokenizer)))
+        print("Vocab length (initial):", len(tokenizer))
 
         with open("{}/new_vocab.json".format(training_args.output_dir), "r") as vocab_file:
             vocab_list = json.load(vocab_file)
-        tokenizer.add_tokens(vocab_list)
-        logger.info("Vocab length (final)", len(tokenizer))
-        print("Vocab length (final)", len(tokenizer))
+        print(vocab_list)
+        num_added_tokens = tokenizer.add_tokens(vocab_list)
+
+        logger.info("New vocabulary length: {} out of {}".format(num_added_tokens, len(vocab_list)))
+
+        logger.info("Vocab length (final): {}".format(len(tokenizer)))
+        print("Vocab length (final):", len(tokenizer))
 
         feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(model_args.model_name_or_path)
         processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+        
         return processor
 
     cache_dir_path = "./{}/{}".format(data_args.cache_dir_name, model_args.model_name_or_path)
@@ -151,7 +144,11 @@ def run(model_args, data_args, training_args):
                     "test": "{}/test_vocab.arrow".format(cache_dir_path),
                 }
             )
-            vocab_list = list(set(list(chain.from_iterable(_vocab["train"]["vocab"][0])) + list(chain.from_iterable(_vocab["valid"]["vocab"][0])) + list(chain.from_iterable(_vocab["test"]["vocab"][0]))))
+
+            def flatten(vocab_split):
+                return list(chain.from_iterable(list(chain.from_iterable(vocab_split))))
+
+            vocab_list = list(set(flatten(_vocab["train"]["vocab"]) + flatten(_vocab["valid"]["vocab"]) + flatten(_vocab["test"]["vocab"])))
             # vocab_dict = {v: k for k, v in enumerate(vocab_list)}
             # vocab_dict["|"] = vocab_dict[" "]
             # vocab_dict["[UNK]"] = len(vocab_dict)
@@ -207,6 +204,19 @@ def run(model_args, data_args, training_args):
     # Prepare Data Collator and Trainer
     ###
     print('Preparing Trainer...')
+
+    print('Load Wav2Vec2 model...')
+    print('Model ID', model_args.model_name_or_path)
+    config = Wav2Vec2Config.from_pretrained(model_args.model_name_or_path)
+    config.update({
+        "mask_time_prob": model_args.mask_time_prob,
+        "mask_time_length": model_args.mask_time_length,
+        "mask_feature_prob": model_args.mask_feature_prob,
+        "mask_feature_length": model_args.mask_feature_length,
+        "gradient_checkpointing": training_args.gradient_checkpointing,
+    })
+    model = Wav2Vec2ForCTC.from_pretrained(model_args.model_name_or_path, config=config)
+    model.cuda()
 
     # Instantiate custom data collator
     data_collator = DataCollatorCTCWithPadding(processor=processor)
