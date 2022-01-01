@@ -70,6 +70,24 @@ def run(model_args, data_args, training_args):
     model = Wav2Vec2ForCTC.from_pretrained(model_args.model_name_or_path, config=config)
     model.cuda()
 
+    def load_processor(model_args, training_args):
+        # Load processor
+        print('Load Wav2Vec2 processor...')
+
+        tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(model_args.model_name_or_path)
+        logger.info("Vocab length (initial)", len(tokenizer))
+        print("Vocab length (initial)", len(tokenizer))
+
+        with open("{}/new_vocab.json".format(training_args.output_dir), "r") as vocab_file:
+            vocab_list = json.load(vocab_file)
+        tokenizer.add_tokens(vocab_list)
+        logger.info("Vocab length (final)", len(tokenizer))
+        print("Vocab length (final)", len(tokenizer))
+
+        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(model_args.model_name_or_path)
+        processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+        return processor
+
     cache_dir_path = "./{}/{}".format(data_args.cache_dir_name, model_args.model_name_or_path)
     os.makedirs(cache_dir_path, exist_ok=True)
 
@@ -119,7 +137,7 @@ def run(model_args, data_args, training_args):
         def extract_all_chars(batch):
             all_text = " ".join(batch[data_args.text_column_name])
             vocab = list(set(all_text))
-            return {"vocab": vocab, "all_text": all_text}
+            return {"vocab": [vocab], "all_text": [all_text]}
 
         with training_args.main_process_first(desc="vocab building"):
             _vocab = raw_datasets.map(
@@ -133,22 +151,25 @@ def run(model_args, data_args, training_args):
                     "test": "{}/test_vocab.arrow".format(cache_dir_path),
                 }
             )
-            vocab_list = list(set(list(chain.from_iterable(_vocab["train"]["vocab"])) + list(chain.from_iterable(_vocab["valid"]["vocab"])) + list(chain.from_iterable(_vocab["test"]["vocab"]))))
-            vocab_dict = {v: k for k, v in enumerate(vocab_list)}
-            vocab_dict["|"] = vocab_dict[" "]
-            vocab_dict["[UNK]"] = len(vocab_dict)
-            vocab_dict["[PAD]"] = len(vocab_dict)
+            vocab_list = list(set(list(chain.from_iterable(_vocab["train"]["vocab"][0])) + list(chain.from_iterable(_vocab["valid"]["vocab"][0])) + list(chain.from_iterable(_vocab["test"]["vocab"][0]))))
+            # vocab_dict = {v: k for k, v in enumerate(vocab_list)}
+            # vocab_dict["|"] = vocab_dict[" "]
+            # vocab_dict["[UNK]"] = len(vocab_dict)
+            # vocab_dict["[PAD]"] = len(vocab_dict)
 
             # Dump vocabulary
-            with open("{}/vocab.json".format(training_args.output_dir), "w") as vocab_file:
-                json.dump(vocab_dict, vocab_file)
+            with open("{}/new_vocab.json".format(training_args.output_dir), "w") as vocab_file:
+                json.dump(vocab_list, vocab_file)
+
+        # Load processor
+        processor = load_processor(model_args, training_args)
 
         # Preprocess audio sample and label text
         print('Vectorize dataset...')
 
         def prepare_dataset(batch):
             # Preprocess audio
-            batch["input_values"] = processor(batch["speech_sample"]).input_values[0]
+            batch["input_values"] = processor(batch["speech_sample"], sampling_rate=16000).input_values[0]
 
             # Preprocess text
             with processor.as_target_processor():
@@ -162,7 +183,7 @@ def run(model_args, data_args, training_args):
                 remove_columns=raw_datasets["train"].column_names,
                 num_proc=data_args.preprocessing_num_workers,
                 desc="preprocess datasets",
-                load_from_cache_file=False,
+                load_from_cache_file=True,
                 cache_file_names={
                     "train": "{}/train_vec.arrow".format(cache_dir_path),
                     "valid": "{}/valid_vec.arrow".format(cache_dir_path),
@@ -175,6 +196,9 @@ def run(model_args, data_args, training_args):
         print('Loading cached dataset...')
         vectorized_datasets = datasets.load_from_disk('{}/preprocess_data.arrow'.format(cache_dir_path))
 
+        # Load processor
+        processor = load_processor(model_args, training_args)
+
     if data_args.preprocessing_only:
         logger.info(f"Data preprocessing finished. Files cached at {vectorized_datasets.cache_files}")
         return
@@ -183,12 +207,6 @@ def run(model_args, data_args, training_args):
     # Prepare Data Collator and Trainer
     ###
     print('Preparing Trainer...')
-
-    # Load processor
-    print('Load Wav2Vec2 processor...')
-    tokenizer = Wav2Vec2CTCTokenizer("{}/vocab.json".format(training_args.output_dir), unk_token="[UNK]", pad_token="[PAD]", word_delimiter_token="|")
-    feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(model_args.model_name_or_path)
-    processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
     # Instantiate custom data collator
     data_collator = DataCollatorCTCWithPadding(processor=processor)
