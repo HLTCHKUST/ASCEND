@@ -62,19 +62,26 @@ def run(model_args, data_args, training_args):
         # Load processor
         print('Load Wav2Vec2 processor...')
 
-        tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(model_args.model_name_or_path)
-        logger.info("Vocab length (initial): {}".format(len(tokenizer)))
-        print("Vocab length (initial):", len(tokenizer))
+        pretrained_tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(model_args.model_name_or_path)
+        pretrained_vocab = list(pretrained_tokenizer.get_vocab().keys())
 
-        with open("{}/new_vocab.json".format(training_args.output_dir), "r") as vocab_file:
-            vocab_list = json.load(vocab_file)
-        print(vocab_list)
-        num_added_tokens = tokenizer.add_tokens(vocab_list)
+        logger.info("Vocab length (initial): {}".format(len(pretrained_vocab)))
+        print("Vocab length (initial):", len(pretrained_vocab))
 
-        logger.info("New vocabulary length: {} out of {}".format(num_added_tokens, len(vocab_list)))
+        with open("{}/new_vocab.json".format(training_args.output_dir), "r") as new_vocab_file:
+            new_vocab_list = json.load(new_vocab_file)
+            logger.info("New vocabulary length: {}".format(len(new_vocab_list)))
 
-        logger.info("Vocab length (final): {}".format(len(tokenizer)))
-        print("Vocab length (final):", len(tokenizer))
+        vocab_dict = {v: k for k, v in enumerate(set(pretrained_vocab + new_vocab_list))}
+        vocab_dict["|"] = vocab_dict[" "]
+
+        with open("{}/all_vocab.json".format(training_args.output_dir), "w") as vocab_file:
+            json.dump(vocab_dict, vocab_file)
+            
+        tokenizer = Wav2Vec2CTCTokenizer("{}/all_vocab.json".format(training_args.output_dir))
+
+        logger.info("Vocab size (final): {}".format(tokenizer.vocab_size))
+        print("Vocab size (final):", tokenizer.vocab_size)
 
         feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(model_args.model_name_or_path)
         processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
@@ -214,7 +221,9 @@ def run(model_args, data_args, training_args):
         "mask_feature_prob": model_args.mask_feature_prob,
         "mask_feature_length": model_args.mask_feature_length,
         "gradient_checkpointing": training_args.gradient_checkpointing,
+        "vocab_size": processor.tokenizer.vocab_size,
     })
+    print(config)
     model = Wav2Vec2ForCTC.from_pretrained(model_args.model_name_or_path, config=config)
     model.cuda()
 
