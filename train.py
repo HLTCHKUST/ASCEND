@@ -62,8 +62,11 @@ def run(model_args, data_args, training_args):
         # Load processor
         print('Load Wav2Vec2 processor...')
 
-        pretrained_tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(model_args.model_name_or_path)
-        pretrained_vocab = list(pretrained_tokenizer.get_vocab().keys())
+        try:
+            pretrained_tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(model_args.model_name_or_path)
+            pretrained_vocab = list(pretrained_tokenizer.get_vocab().keys())
+        except:
+            pretrained_vocab = []
 
         logger.info("Vocab length (initial): {}".format(len(pretrained_vocab)))
         print("Vocab length (initial):", len(pretrained_vocab))
@@ -74,6 +77,28 @@ def run(model_args, data_args, training_args):
 
         vocab_dict = {v: k for k, v in enumerate(set(pretrained_vocab + new_vocab_list))}
         vocab_dict["|"] = vocab_dict[" "]
+
+        def _assign_id_to_special_tokens(vocab_dict):
+            bos_token = "<s>"
+            eos_token = "</s>"
+            unk_token = "<unk>"
+            pad_token = "<pad>"
+
+            if bos_token not in vocab_dict:
+                vocab_dict[bos_token] = len(vocab_dict)
+
+            if eos_token not in vocab_dict:
+                vocab_dict[eos_token] = len(vocab_dict)
+
+            if unk_token not in vocab_dict:
+                vocab_dict[unk_token] = len(vocab_dict)
+
+            if pad_token not in vocab_dict:
+                vocab_dict[pad_token] = len(vocab_dict)
+
+            return vocab_dict
+
+        vocab_dict = _assign_id_to_special_tokens(vocab_dict)
 
         with open("{}/all_vocab.json".format(training_args.output_dir), "w") as vocab_file:
             json.dump(vocab_dict, vocab_file)
@@ -221,11 +246,18 @@ def run(model_args, data_args, training_args):
         "mask_feature_prob": model_args.mask_feature_prob,
         "mask_feature_length": model_args.mask_feature_length,
         "gradient_checkpointing": training_args.gradient_checkpointing,
-        "vocab_size": processor.tokenizer.vocab_size,
     })
-    print(config)
     model = Wav2Vec2ForCTC.from_pretrained(model_args.model_name_or_path, config=config)
     model.cuda()
+
+    def _resize_token_embeddings(model, new_num_tokens):
+        old_lm_head = model.lm_head
+        new_lm_head = model._get_resized_lm_head(old_lm_head, new_num_tokens)
+        model.lm_head =  new_lm_head
+        model.config.update({"vocab_size": new_num_tokens})
+        return model
+
+    model = _resize_token_embeddings(model, processor.tokenizer.vocab_size)
 
     # Instantiate custom data collator
     data_collator = DataCollatorCTCWithPadding(processor=processor)
