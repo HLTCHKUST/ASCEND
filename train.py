@@ -72,7 +72,7 @@ def load_processor(model_args, training_args):
     def _assign_id_to_special_tokens(vocab_dict):
         bos_token = "<s>"
         eos_token = "</s>"
-        unk_token = "<unk>"
+        unk_token = "[UNK]"
         pad_token = "<pad>"
 
         if bos_token not in vocab_dict:
@@ -95,7 +95,7 @@ def load_processor(model_args, training_args):
     with open("{}/all_vocab.json".format(training_args.output_dir), "w") as vocab_file:
         json.dump(vocab_dict, vocab_file)
         
-    tokenizer = Wav2Vec2CTCTokenizer("{}/all_vocab.json".format(training_args.output_dir))
+    tokenizer = Wav2Vec2CTCTokenizer("{}/all_vocab.json".format(training_args.output_dir), unk_token="[UNK]")
 
     logger.info("Vocab size (final): {}".format(tokenizer.vocab_size))
     print("Vocab size (final):", tokenizer.vocab_size)
@@ -268,7 +268,7 @@ def run(model_args, data_args, training_args):
 
     # Define compute metric function
     def compute_metrics(pred):
-        logger.debug("*** Compute metrics ***")
+        logger.info("*** Compute metrics ***")
         pred_logits = pred.predictions
         pred_ids = np.argmax(pred_logits, axis=-1)
         pred.label_ids[pred.label_ids == -100] = processor.tokenizer.pad_token_id
@@ -281,7 +281,7 @@ def run(model_args, data_args, training_args):
         char_distance, char_tokens = 0, 0
         for pred_str, label_str in zip(pred_strs, label_strs):
 
-            logger.debug("Prediction: {} --- Label: {}".format(pred_str, label_str))
+            logger.info("Prediction: {} --- Label: {}".format(pred_str, label_str))
 
             # Calculate 
             m_pred = tokenize_for_mer(pred_str)
@@ -296,7 +296,7 @@ def run(model_args, data_args, training_args):
         mer = mixed_distance / mixed_tokens
         cer = char_distance / char_tokens
 
-        logger.debug("mer: {} --- cer: {}".format(mer, cer))
+        logger.info("mer: {} --- cer: {}".format(mer, cer))
 
         return {"mer": mer, "cer": cer} 
 
