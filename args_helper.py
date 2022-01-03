@@ -83,6 +83,6 @@ class TrainingArguments(TrainingArguments):
         metadata={"help": "Output directory"},
     )
     eval_accumulation_steps: Optional[int] = field(
-        default=100,
+        default=1,
         metadata={"help": "Evaluation accumulation steps"}
     )

@@ -47,6 +47,64 @@ from datasets import load_from_disk, set_caching_enabled
 set_caching_enabled(True)
 logger = logging.getLogger(__name__)    
 
+
+def load_processor(model_args, training_args):
+    # Load processor
+    print('Load Wav2Vec2 processor...')
+
+    try:
+        pretrained_tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(model_args.model_name_or_path)
+        pretrained_vocab = list(pretrained_tokenizer.get_vocab().keys())
+    except:
+        pretrained_vocab = []
+
+    logger.info("Vocab length (initial): {}".format(len(pretrained_vocab)))
+    print("Vocab length (initial):", len(pretrained_vocab))
+
+    with open("{}/new_vocab.json".format(training_args.output_dir), "r") as new_vocab_file:
+        new_vocab_list = json.load(new_vocab_file)
+        logger.info("New vocabulary length: {}".format(len(new_vocab_list)))
+
+    all_vocab = list(dict.fromkeys(pretrained_vocab + new_vocab_list))
+
+    vocab_dict = {v: k for k, v in enumerate(all_vocab)}
+
+    def _assign_id_to_special_tokens(vocab_dict):
+        bos_token = "<s>"
+        eos_token = "</s>"
+        unk_token = "<unk>"
+        pad_token = "<pad>"
+
+        if bos_token not in vocab_dict:
+            vocab_dict[bos_token] = len(vocab_dict)
+
+        if eos_token not in vocab_dict:
+            vocab_dict[eos_token] = len(vocab_dict)
+
+        if unk_token not in vocab_dict:
+            vocab_dict[unk_token] = len(vocab_dict)
+
+        if pad_token not in vocab_dict:
+            vocab_dict[pad_token] = len(vocab_dict)
+
+        return vocab_dict
+
+    vocab_dict = _assign_id_to_special_tokens(vocab_dict)
+    print("len vocab dict", len(vocab_dict))
+
+    with open("{}/all_vocab.json".format(training_args.output_dir), "w") as vocab_file:
+        json.dump(vocab_dict, vocab_file)
+        
+    tokenizer = Wav2Vec2CTCTokenizer("{}/all_vocab.json".format(training_args.output_dir))
+
+    logger.info("Vocab size (final): {}".format(tokenizer.vocab_size))
+    print("Vocab size (final):", tokenizer.vocab_size)
+
+    feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(model_args.model_name_or_path)
+    processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+    
+    return processor
+    
 #####
 # Main Functions
 #####
@@ -57,61 +115,6 @@ def run(model_args, data_args, training_args):
     training_args.output_dir="{}/{}".format(training_args.output_dir, model_args.model_name_or_path)
 
     os.makedirs(training_args.output_dir, exist_ok=True)
-
-    def load_processor(model_args, training_args):
-        # Load processor
-        print('Load Wav2Vec2 processor...')
-
-        try:
-            pretrained_tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(model_args.model_name_or_path)
-            pretrained_vocab = list(pretrained_tokenizer.get_vocab().keys())
-        except:
-            pretrained_vocab = []
-
-        logger.info("Vocab length (initial): {}".format(len(pretrained_vocab)))
-        print("Vocab length (initial):", len(pretrained_vocab))
-
-        with open("{}/new_vocab.json".format(training_args.output_dir), "r") as new_vocab_file:
-            new_vocab_list = json.load(new_vocab_file)
-            logger.info("New vocabulary length: {}".format(len(new_vocab_list)))
-
-        vocab_dict = {v: k for k, v in enumerate(set(pretrained_vocab + new_vocab_list))}
-        vocab_dict["|"] = vocab_dict[" "]
-
-        def _assign_id_to_special_tokens(vocab_dict):
-            bos_token = "<s>"
-            eos_token = "</s>"
-            unk_token = "<unk>"
-            pad_token = "<pad>"
-
-            if bos_token not in vocab_dict:
-                vocab_dict[bos_token] = len(vocab_dict)
-
-            if eos_token not in vocab_dict:
-                vocab_dict[eos_token] = len(vocab_dict)
-
-            if unk_token not in vocab_dict:
-                vocab_dict[unk_token] = len(vocab_dict)
-
-            if pad_token not in vocab_dict:
-                vocab_dict[pad_token] = len(vocab_dict)
-
-            return vocab_dict
-
-        vocab_dict = _assign_id_to_special_tokens(vocab_dict)
-
-        with open("{}/all_vocab.json".format(training_args.output_dir), "w") as vocab_file:
-            json.dump(vocab_dict, vocab_file)
-            
-        tokenizer = Wav2Vec2CTCTokenizer("{}/all_vocab.json".format(training_args.output_dir))
-
-        logger.info("Vocab size (final): {}".format(tokenizer.vocab_size))
-        print("Vocab size (final):", tokenizer.vocab_size)
-
-        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(model_args.model_name_or_path)
-        processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
-        
-        return processor
 
     cache_dir_path = "./{}/{}".format(data_args.cache_dir_name, model_args.model_name_or_path)
     os.makedirs(cache_dir_path, exist_ok=True)
@@ -253,17 +256,19 @@ def run(model_args, data_args, training_args):
     def _resize_token_embeddings(model, new_num_tokens):
         old_lm_head = model.lm_head
         new_lm_head = model._get_resized_lm_head(old_lm_head, new_num_tokens)
-        model.lm_head =  new_lm_head
+        model.lm_head = new_lm_head
         model.config.update({"vocab_size": new_num_tokens})
         return model
 
     model = _resize_token_embeddings(model, processor.tokenizer.vocab_size)
+
 
     # Instantiate custom data collator
     data_collator = DataCollatorCTCWithPadding(processor=processor)
 
     # Define compute metric function
     def compute_metrics(pred):
+        logger.debug("*** Compute metrics ***")
         pred_logits = pred.predictions
         pred_ids = np.argmax(pred_logits, axis=-1)
         pred.label_ids[pred.label_ids == -100] = processor.tokenizer.pad_token_id
@@ -275,6 +280,9 @@ def run(model_args, data_args, training_args):
         mixed_distance, mixed_tokens = 0, 0
         char_distance, char_tokens = 0, 0
         for pred_str, label_str in zip(pred_strs, label_strs):
+
+            logger.debug("Prediction: {} --- Label: {}".format(pred_str, label_str))
+
             # Calculate 
             m_pred = tokenize_for_mer(pred_str)
             m_ref = tokenize_for_mer(label_str)
@@ -287,6 +295,8 @@ def run(model_args, data_args, training_args):
             char_tokens += len(c_ref)
         mer = mixed_distance / mixed_tokens
         cer = char_distance / char_tokens
+
+        logger.debug("mer: {} --- cer: {}".format(mer, cer))
 
         return {"mer": mer, "cer": cer} 
 
