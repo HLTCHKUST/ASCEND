@@ -54,7 +54,7 @@ def load_processor(model_args, training_args):
 
     try:
         pretrained_tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(model_args.model_name_or_path)
-        pretrained_vocab = list(pretrained_tokenizer.get_vocab().keys())
+        pretrained_vocab = list(map(lambda x: x[0], sorted(pretrained_tokenizer.get_vocab().items(), key=lambda x: x[1])))
     except:
         pretrained_vocab = []
 
