@@ -142,9 +142,9 @@ def run(model_args, data_args, training_args):
         chars_to_ignore_re = f"[{re.escape(''.join(CHARS_TO_IGNORE))}]"
         def remove_special_characters(batch):
             if chars_to_ignore_re is not None:
-                batch[data_args.text_column_name] = re.sub(chars_to_ignore_re, "", batch[data_args.text_column_name]).lower() + " "
+                batch[data_args.text_column_name] = re.sub(chars_to_ignore_re, "", batch[data_args.text_column_name]).upper() + " "
             else:
-                batch[data_args.text_column_name] = batch[data_args.text_column_name].lower() + " "
+                batch[data_args.text_column_name] = batch[data_args.text_column_name].upper() + " "
             return batch
 
         with training_args.main_process_first(desc="dataset map special characters removal"):
@@ -308,7 +308,8 @@ def run(model_args, data_args, training_args):
         data_collator=data_collator,
         args=training_args,
         compute_metrics=compute_metrics,
-        tokenizer=processor.feature_extractor
+        tokenizer=processor.feature_extractor,
+        callbacks=[EarlyStoppingCallback(early_stopping_patience=5)]
     )
 
     ###
