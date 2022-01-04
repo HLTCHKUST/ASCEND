@@ -74,6 +74,7 @@ def load_processor(model_args, training_args):
         eos_token = "</s>"
         unk_token = "[UNK]"
         pad_token = "<pad>"
+        word_delimiter_token = "|"
 
         if bos_token not in vocab_dict:
             vocab_dict[bos_token] = len(vocab_dict)
@@ -86,6 +87,9 @@ def load_processor(model_args, training_args):
 
         if pad_token not in vocab_dict:
             vocab_dict[pad_token] = len(vocab_dict)
+
+        if word_delimiter_token not in vocab_dict:
+            vocab_dict[word_delimiter_token] = len(vocab_dict)
 
         return vocab_dict
 
