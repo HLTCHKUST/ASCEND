@@ -1,12 +1,12 @@
-# CUDA_VISIBLE_DEVICES=3 python train.py --model_name_or_path=ydshieh/wav2vec2-large-xlsr-53-chinese-zh-cn-gpt \
+# CUDA_VISIBLE_DEVICES=0 python train.py --model_name_or_path=jonatasgrosman/wav2vec2-large-xlsr-53-chinese-zh-cn \
 #     --train_manifest_path=dataset/train_metadata.csv \
 #     --valid_manifest_path=dataset/validation_metadata.csv \
 #     --test_manifest_path=dataset/test_metadata.csv \
 #     --num_workers=8 --preprocessing_num_workers=16 \
 #     --audio_column_name=file_name --text_column_name=transcription \
-#     --per_device_train_batch_size=4 --per_device_eval_batch_size=8 \
-#     --dataloader_num_workers=8 --dataloader_pin_memory --group_by_length \
-#     --seed=14045 --num_train_epochs=50 --learning_rate=1e-5 \
+#     --per_device_train_batch_size=16 --per_device_eval_batch_size=16 \
+#     --dataloader_num_workers=4 --dataloader_pin_memory --group_by_length \
+#     --seed=14045 --num_train_epochs=50 --learning_rate=3e-4 \
 #     --fp16 --fp16_backend=amp \
 #     --logging_strategy=steps --logging_steps=10 --report_to=tensorboard \
 #     --evaluation_strategy=epoch --eval_steps=1 --eval_accumulation_steps=1 \
@@ -14,15 +14,15 @@
 #     --metric_for_best_model=mer --greater_is_better=False --load_best_model_at_end=True \
 #     --gradient_checkpointing=True
 
-# CUDA_VISIBLE_DEVICES=0 python train.py --model_name_or_path=jonatasgrosman/wav2vec2-large-xlsr-53-english \
+# CUDA_VISIBLE_DEVICES=1 python train.py --model_name_or_path=jonatasgrosman/wav2vec2-large-xlsr-53-english \
 #     --train_manifest_path=dataset/train_metadata.csv \
 #     --valid_manifest_path=dataset/validation_metadata.csv \
 #     --test_manifest_path=dataset/test_metadata.csv \
 #     --num_workers=8 --preprocessing_num_workers=16 \
 #     --audio_column_name=file_name --text_column_name=transcription \
-#     --per_device_train_batch_size=4 --per_device_eval_batch_size=8 \
-#     --dataloader_num_workers=8 --dataloader_pin_memory --group_by_length \
-#     --seed=14045 --num_train_epochs=50 --learning_rate=1e-5 \
+#     --per_device_train_batch_size=16 --per_device_eval_batch_size=16 \
+#     --dataloader_num_workers=4 --dataloader_pin_memory --group_by_length \
+#     --seed=14045 --num_train_epochs=50 --learning_rate=3e-4 \
 #     --fp16 --fp16_backend=amp \
 #     --logging_strategy=steps --logging_steps=10 --report_to=tensorboard \
 #     --evaluation_strategy=epoch --eval_steps=1 --eval_accumulation_steps=1 \
@@ -36,9 +36,9 @@ CUDA_VISIBLE_DEVICES=2 python train.py --model_name_or_path=facebook/wav2vec2-la
     --test_manifest_path=dataset/test_metadata.csv \
     --num_workers=8 --preprocessing_num_workers=16 \
     --audio_column_name=file_name --text_column_name=transcription \
-    --per_device_train_batch_size=4 --per_device_eval_batch_size=8 \
-    --dataloader_num_workers=8 --dataloader_pin_memory --group_by_length \
-    --seed=14045 --num_train_epochs=50 --learning_rate=1e-5 \
+    --per_device_train_batch_size=16 --per_device_eval_batch_size=16 \
+    --dataloader_num_workers=4 --dataloader_pin_memory --group_by_length \
+    --seed=14045 --num_train_epochs=50 --learning_rate=5e-4 \
     --fp16 --fp16_backend=amp \
     --logging_strategy=steps --logging_steps=10 --report_to=tensorboard \
     --evaluation_strategy=epoch --eval_steps=1 --eval_accumulation_steps=1 \
@@ -46,20 +46,36 @@ CUDA_VISIBLE_DEVICES=2 python train.py --model_name_or_path=facebook/wav2vec2-la
     --metric_for_best_model=mer --greater_is_better=False --load_best_model_at_end=True \
     --gradient_checkpointing=True
 
-# CUDA_VISIBLE_DEVICES=1 python train.py --model_name_or_path=jonatasgrosman/wav2vec2-large-xlsr-53-english \
+# CUDA_VISIBLE_DEVICES=1 python train.py --model_name_or_path=ydshieh/wav2vec2-large-xlsr-53-chinese-zh-cn-gpt \
 #     --train_manifest_path=dataset/train_metadata.csv \
 #     --valid_manifest_path=dataset/validation_metadata.csv \
 #     --test_manifest_path=dataset/test_metadata.csv \
+#     --num_workers=0 --preprocessing_num_workers=0 \
+#     --audio_column_name=file_name --text_column_name=transcription \
+#     --per_device_train_batch_size=4 --per_device_eval_batch_size=8 \
+#     --dataloader_num_workers=0 --dataloader_pin_memory --group_by_length \
+#     --seed=14045 --learning_rate=1e-5 \
+#     --fp16 --fp16_backend=amp \
+#     --logging_strategy=steps --logging_steps=10 --report_to=tensorboard \
+#     --evaluation_strategy=steps --eval_steps=10 --eval_accumulation_steps=1 \
+#     --save_steps=10 --save_total_limit=3 \
+#     --metric_for_best_model=mer --greater_is_better=False \
+#     --gradient_checkpointing=True
+
+# CUDA_VISIBLE_DEVICES=1 python train.py --model_name_or_path=jonatasgrosman/wav2vec2-large-xlsr-53-english \
+#     --train_manifest_path=dataset/en_train_metadata.csv \
+#     --valid_manifest_path=dataset/en_validation_metadata.csv \
+#     --test_manifest_path=dataset/en_test_metadata.csv \
 #     --num_workers=8 --preprocessing_num_workers=16 \
 #     --audio_column_name=file_name --text_column_name=transcription \
 #     --per_device_train_batch_size=4 --per_device_eval_batch_size=8 \
 #     --dataloader_num_workers=8 --dataloader_pin_memory --group_by_length \
-#     --seed=14045 --learning_rate=1e-5 \
+#     --seed=14045 --num_train_epochs=50 --learning_rate=3e-4 \
 #     --fp16 --fp16_backend=amp \
 #     --logging_strategy=steps --logging_steps=10 --report_to=tensorboard \
-#     --evaluation_strategy=steps --eval_steps=100 --eval_accumulation_steps=1 \
-#     --save_steps=100 --save_total_limit=3 \
-#     --metric_for_best_model=mer --greater_is_better=False \
+#     --evaluation_strategy=epoch --eval_steps=1 --eval_accumulation_steps=1 \
+#     --save_steps=1 --save_strategy=epoch --save_total_limit=3 \
+#     --metric_for_best_model=mer --greater_is_better=False --load_best_model_at_end=True \
 #     --gradient_checkpointing=True
 
 # # Distributed
