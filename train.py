@@ -130,13 +130,13 @@ def run(model_args, data_args, training_args):
         ###
         raw_datasets = DatasetDict()
         print('Loading train dataset...')
-        raw_datasets["train"] = load_dataset(data_args.train_manifest_path, data_args.num_workers, 
+        raw_datasets["train"] = load_dataset(data_args.train_manifest_path, data_args.preprocessing_num_workers, 
                                         data_args.audio_column_name, data_args.text_column_name)
         print('Loading validation dataset...')
-        raw_datasets["valid"] = load_dataset(data_args.valid_manifest_path, data_args.num_workers, 
+        raw_datasets["valid"] = load_dataset(data_args.valid_manifest_path, data_args.preprocessing_num_workers, 
                                         data_args.audio_column_name, data_args.text_column_name)
         print('Loading test dataset...')
-        raw_datasets["test"] = load_dataset(data_args.test_manifest_path, data_args.num_workers, 
+        raw_datasets["test"] = load_dataset(data_args.test_manifest_path, data_args.preprocessing_num_workers, 
                                         data_args.audio_column_name, data_args.text_column_name)
 
         print('Preprocess dataset...')
@@ -283,10 +283,7 @@ def run(model_args, data_args, training_args):
         label_strs = processor.batch_decode(pred.label_ids, group_tokens=False)
         mixed_distance, mixed_tokens = 0, 0
         char_distance, char_tokens = 0, 0
-        for pred_str, label_str in zip(pred_strs, label_strs):
-
-            logger.info("Prediction: {} --- Label: {}".format(pred_str, label_str))
-
+        for i, (pred_str, label_str) in enumerate(zip(pred_strs, label_strs)):
             # Calculate 
             m_pred = tokenize_for_mer(pred_str)
             m_ref = tokenize_for_mer(label_str)

@@ -17,6 +17,7 @@ from transformers import (
     Wav2Vec2CTCTokenizer,
     Wav2Vec2FeatureExtractor,
     Wav2Vec2ForCTC,
+    Wav2Vec2Config,
     Trainer,
     TrainingArguments,
     HfArgumentParser,
@@ -39,7 +40,7 @@ from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 
 from args_helper import ModelArguments, DataArguments
-from utils import CHARS_TO_IGNORE, remove_special_characters, extract_all_chars, tokenize_for_mer, tokenize_for_cer
+from utils import CHARS_TO_IGNORE, remove_special_characters, tokenize_for_mer, tokenize_for_cer
 from data_utils import speech_file_to_array_fn, load_dataset, DataCollatorCTCWithPadding
 from datasets import set_caching_enabled
 
@@ -62,23 +63,27 @@ def run(model_args, data_args, training_args):
         "mask_feature_length": 0,
         "gradient_checkpointing": True,
     })
-    processor = Wav2Vec2Processor.from_pretrained(model_args.model_name_or_path)
+    parent_model_path = '/'.join(model_args.model_name_or_path.split('/')[:-1])
+    processor = Wav2Vec2Processor.from_pretrained(parent_model_path)
     model = Wav2Vec2ForCTC.from_pretrained(model_args.model_name_or_path, config=config)
     model.cuda()    
     
-    if not os.path.exists('./cache/preprocess_data.arrow'):
+    cache_dir_path = data_args.cache_dir_name
+    print('cache_dir_path', cache_dir_path)
+    
+    if not os.path.exists("{}/preprocess_data.arrow".format(cache_dir_path)):
         ###
         # Prepare Dataset
         ###
         raw_datasets = DatasetDict()
         print('Loading train dataset...')
-        raw_datasets["train"] = load_dataset(data_args.train_manifest_path, data_args.num_workers, 
+        raw_datasets["train"] = load_dataset(data_args.train_manifest_path, data_args.preprocessing_num_workers, 
                                         data_args.audio_column_name, data_args.text_column_name)
         print('Loading validation dataset...')
-        raw_datasets["valid"] = load_dataset(data_args.valid_manifest_path, data_args.num_workers, 
+        raw_datasets["valid"] = load_dataset(data_args.valid_manifest_path, data_args.preprocessing_num_workers, 
                                         data_args.audio_column_name, data_args.text_column_name)
         print('Loading test dataset...')
-        raw_datasets["test"] = load_dataset(data_args.test_manifest_path, data_args.num_workers, 
+        raw_datasets["test"] = load_dataset(data_args.test_manifest_path, data_args.preprocessing_num_workers, 
                                         data_args.audio_column_name, data_args.text_column_name)
 
         print('Preprocess dataset...')
@@ -136,11 +141,7 @@ def run(model_args, data_args, training_args):
         vectorized_datasets.save_to_disk('./cache/preprocess_data.arrow')
     else:
         print('Loading cached dataset...')
-        vectorized_datasets = datasets.load_from_disk('./cache/preprocess_data.arrow')
-
-    if data_args.preprocessing_only:
-        logger.info(f"Data preprocessing finished. Files cached at {vectorized_datasets.cache_files}")
-        return
+        vectorized_datasets = datasets.load_from_disk('{}/preprocess_data.arrow'.format(cache_dir_path))
     
     ###
     # Prepare Data Collator and Trainer
@@ -174,10 +175,10 @@ def run(model_args, data_args, training_args):
             char_distance += editdistance.distance(c_pred, c_ref)
             char_tokens += len(c_ref)
             
-        f = open(f'{data_args.output_dir}/test.results', 'w')
+        f = open(f'{training_args.output_dir}/test.results', 'w')
         f.writelines([item+'\n' for item in pred_strs])
         f.close()
-        f = open(f'{data_args.output_dir}/test.label', 'w')
+        f = open(f'{training_args.output_dir}/test.label', 'w')
         f.writelines([item+'\n' for item in label_strs])
         f.close()
         
@@ -185,25 +186,6 @@ def run(model_args, data_args, training_args):
         cer = char_distance / char_tokens
 
         return {"mer": mer, "cer": cer}
-
-    # Add config to args
-    ## Logging config
-    args.logging_strategy='steps'
-    args.logging_steps=10
-    args.report_to=['tensorboard']
-        
-    ## Eval config
-    args.evaluation_strategy="epoch"
-    args.eval_steps=1
-    args.eval_accumulation_steps=500
-    args.metric_for_best_model='mer'
-    args.greater_is_better=False
-    args.load_best_model_at_end=True
-        
-    ## Save config
-    args.save_steps=1
-    args.save_strategy='epoch'
-    args.save_total_limit=3
     
     # Initialize Trainer
     trainer = Trainer(
@@ -221,7 +203,7 @@ def run(model_args, data_args, training_args):
     ###
     results = {}
     logger.info("*** Test Phase ***")
-    metrics = trainer.predict(eval_dataset=vectorized_datasets["test"])
+    metrics = trainer.evaluate(eval_dataset=vectorized_datasets["test"])
     metrics["eval_samples"] = len(vectorized_datasets["test"])
 
     trainer.log_metrics("eval", metrics)

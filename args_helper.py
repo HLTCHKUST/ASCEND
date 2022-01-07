@@ -48,10 +48,6 @@ class DataArguments:
     test_manifest_path: Optional[str] = field(
         default="dataset/test_metadata.csv", metadata={"help": "The path of the testing dataset to use."}
     )
-    num_workers: Optional[int] = field(
-        default=8,
-        metadata={"help": "The number of processes to use for the dataset."},
-    )
     preprocessing_num_workers: Optional[int] = field(
         default=16,
         metadata={"help": "The number of processes to use for the preprocessing."},
