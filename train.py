@@ -83,7 +83,10 @@ def load_processor(model_args, training_args):
             vocab_dict[eos_token] = len(vocab_dict)
 
         if unk_token not in vocab_dict:
-            vocab_dict[unk_token] = len(vocab_dict)
+            if "<unk>" in vocab_dict:
+                vocab_dict[unk_token] = vocab_dict.pop("<unk>")
+            else:
+                vocab_dict[unk_token] = len(vocab_dict)
 
         if pad_token not in vocab_dict:
             vocab_dict[pad_token] = len(vocab_dict)
